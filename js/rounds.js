@@ -315,11 +315,8 @@ function buildRoundSeriesCard(sid, roundIdx, open, locked) {
   } else if (complete) {
     if (pick.winner) {
       let pts = 0;
-      const rIdx = ['w1','w2','w3','w4','e1','e2','e3','e4'].includes(sid) ? 0
-        : ['c1','c2','c3','c4'].includes(sid) ? 1
-        : ['s1','s2'].includes(sid) ? 2 : 3;
       if (pick.winner === result.winner) {
-        pts += SCORING.winnerPoints[rIdx];
+        pts += 1;
         if (pick.score && pick.score === result.score) pts += SCORING.seriesScoreBonus;
       }
       ptsChip = `<div class="series-pts ${pts > 0 ? 'pts-pos' : 'pts-zero'}">${pts > 0 ? '+' + pts : '0'} очк.</div>`;

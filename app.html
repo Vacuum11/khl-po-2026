@@ -56,13 +56,18 @@
   </div>
 
   <!-- SCORING INFO -->
-  <div class="alert alert-info" style="margin-bottom:1.5rem">
-    <strong>Система очков:</strong>
-    1/8 финала = 1 очко &nbsp;·&nbsp;
-    1/4 = 2 &nbsp;·&nbsp;
-    1/2 = 4 &nbsp;·&nbsp;
-    Финал КГ = 8 &nbsp;·&nbsp;
-    +1 бонус за правильное кол-во игр в серии
+  <div id="scoring-info-full" class="alert alert-info" style="margin-bottom:1.5rem">
+    <strong>Система очков — Полная сетка:</strong>
+    1/8 финала = <strong>1 очко</strong> &nbsp;·&nbsp;
+    1/4 = <strong>2</strong> &nbsp;·&nbsp;
+    1/2 = <strong>4</strong> &nbsp;·&nbsp;
+    Финал КГ = <strong>8</strong> &nbsp;·&nbsp;
+    +1 бонус за точный счёт серии
+  </div>
+  <div id="scoring-info-round" class="alert alert-info hidden" style="margin-bottom:1.5rem">
+    <strong>Система очков — По раундам:</strong>
+    За угаданного победителя в любом раунде = <strong>1 очко</strong> &nbsp;·&nbsp;
+    +1 бонус за точный счёт серии
   </div>
 
   <!-- FULL BRACKET VIEW -->
@@ -153,6 +158,8 @@
     document.getElementById('save-bar').classList.toggle('hidden', mode !== 'full');
     document.getElementById('tab-full').classList.toggle('active', mode === 'full');
     document.getElementById('tab-round').classList.toggle('active', mode === 'round');
+    document.getElementById('scoring-info-full').classList.toggle('hidden', mode !== 'full');
+    document.getElementById('scoring-info-round').classList.toggle('hidden', mode !== 'round');
 
     if (mode === 'round') {
       requireAuth().then(({ user, userData }) => {

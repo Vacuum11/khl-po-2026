@@ -37,7 +37,9 @@ async function loadLeaderboard(mode = 'full') {
       // Skip users who haven't submitted predictions for this competition mode
       if (!predMap) return;
 
-      const { total, breakdown } = calculateScore(predMap, resultsData);
+      const { total, breakdown } = mode === 'round'
+        ? calculateRoundScore(predMap, resultsData)
+        : calculateScore(predMap, resultsData);
       rows.push({
         uid:      doc.id,
         username: data.username || 'Аноним',
@@ -109,12 +111,13 @@ async function viewUserPicks(uid, username) {
     let html = '';
 
     if (fullPicks) {
-      html += `<div class="picks-mode-label">Полная сетка</div>${buildPicksView(fullPicks, results)}`;
+      html += `<div class="picks-mode-label">Полная сетка</div>${buildPicksView(fullPicks, results, 'full')}`;
     }
     if (roundPicks) {
       html += `<div class="picks-mode-label" style="margin-top:2rem">По раундам</div>${buildPicksView(
         Object.values(roundPicks).reduce((acc, rnd) => Object.assign(acc, rnd), {}),
-        results
+        results,
+        'round'
       )}`;
     }
     if (!fullPicks && !roundPicks) {
@@ -132,7 +135,7 @@ function closePicksModal() {
 }
 
 // ── Render picks as a round-by-round list ─────────────────
-function buildPicksView(userPicks, results) {
+function buildPicksView(userPicks, results, mode = 'full') {
   const ROUNDS = [
     { name: '1/8 финала', ids: ['w1','w2','w3','w4','e1','e2','e3','e4'] },
     { name: '1/4 финала (перекрёстный)', ids: ['c1','c2','c3','c4'] },
@@ -148,7 +151,9 @@ function buildPicksView(userPicks, results) {
   const REV_SCORE = {'4:0':'0:4','4:1':'1:4','4:2':'2:4','4:3':'3:4'};
 
   // Pre-calculate full score breakdown for this user
-  const { total, breakdown } = calculateScore(userPicks, results);
+  const { total, breakdown } = mode === 'round'
+    ? calculateRoundScore(userPicks, results)
+    : calculateScore(userPicks, results);
 
   function getTeams(sid) {
     const r1W = BRACKET.west.r1.find(s => s.id === sid);

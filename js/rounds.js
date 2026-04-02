@@ -42,10 +42,42 @@ function teamsForRoundSeries(sid, roundIdx) {
   const r1E = BRACKET.east.r1.find(s => s.id === sid);
   if (r1E) return [r1E.home, r1E.away];
 
-  // Later rounds: from real results if available, otherwise from prev round picks
+  // R2 (cross-conference): re-seed survivors just like the full bracket does.
+  // Using hardcoded series IDs (e.g. "winner of w3 → c2") breaks when an
+  // upset happens because the lower seed must be re-sorted by real seed number.
+  if (['c1','c2','c3','c4'].includes(sid)) {
+    const getR1Winner = (r1sid) =>
+      roundResults[r1sid]?.winner || roundPicks[0]?.[r1sid]?.winner || null;
+
+    const buildSurvivors = (conf) => {
+      const r1Series = conf === 'west' ? BRACKET.west.r1 : BRACKET.east.r1;
+      return r1Series
+        .map(s => {
+          const winner = getR1Winner(s.id);
+          if (!winner || (winner !== s.home && winner !== s.away)) return null;
+          const n = parseInt(s.id.slice(1));
+          const teamSeed = winner === s.home ? n : (9 - n);
+          return { teamSeed, winner };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.teamSeed - b.teamSeed);
+    };
+
+    const w = buildSurvivors('west');
+    const e = buildSurvivors('east');
+    if (w.length < 4 || e.length < 4) return ['?', '?'];
+
+    const map = {
+      'c1': [w[0].winner, e[3].winner],
+      'c2': [e[1].winner, w[2].winner],
+      'c3': [e[0].winner, w[3].winner],
+      'c4': [w[1].winner, e[2].winner],
+    };
+    return map[sid] || ['?', '?'];
+  }
+
+  // R3 / Final: from real results if available, otherwise from prev round picks
   const tree = {
-    'c1': ['w1','e4'], 'c2': ['e2','w3'],
-    'c3': ['e1','w4'], 'c4': ['w2','e3'],
     's1': ['c1','c2'], 's2': ['c3','c4'],
     'final': ['s1','s2']
   };
@@ -244,6 +276,7 @@ function buildRoundSeriesCard(sid, roundIdx, open, locked) {
     const hint = isWrong ? '<span class="pick-hint">ваш выбор</span>' : '';
     return `<div class="series-team${dis}${isSelected?' selected':''}${isWinner?' winner':''}${isPicked?' user-pick':''}" data-sid="${sid}" data-team="${team}">
       <div class="team-pick-indicator"></div>
+      ${teamConfBadge(team)}
       ${teamLogoHtml(team)}
       <span class="team-name">${team}</span>
       ${hint}
@@ -325,6 +358,7 @@ function buildRoundSeriesCardReality(sid, roundIdx) {
     const isWinner = complete && result.winner === team;
     return `<div class="series-team disabled${isWinner ? ' winner' : ''}">
       <div class="team-pick-indicator"></div>
+      ${teamConfBadge(team)}
       ${teamLogoHtml(team)}
       <span class="team-name">${team}</span>
     </div>`;

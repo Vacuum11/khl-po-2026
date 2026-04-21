@@ -357,6 +357,10 @@ async function renderParticipants() {
                 onclick="startRenameParticipant('${r.uid}', ${JSON.stringify(escapeHtmlAdmin(r.username))})">
                 ✏ Имя
               </button>
+              <button class="btn btn-ghost btn-sm" style="font-size:.72rem;padding:.25rem .6rem"
+                onclick="openEditPicksModal('${r.uid}', ${JSON.stringify(r.username)})">
+                🗂 Прогноз
+              </button>
             </div>
           </div>
         `).join('')}
@@ -421,6 +425,199 @@ async function saveRenameParticipant(uid) {
   } catch (e) {
     showToast('Ошибка: ' + e.message, 'error');
     input.disabled = false;
+  }
+}
+
+// ── Edit user predictions ─────────────────────────────────
+let _editPicksUid = null;
+
+async function openEditPicksModal(uid, username) {
+  _editPicksUid = uid;
+  const modal = document.getElementById('edit-picks-modal');
+  const body  = document.getElementById('edit-picks-modal-body');
+  const title = document.getElementById('edit-picks-modal-title');
+  if (!modal) return;
+
+  title.textContent = `Прогноз: ${username}`;
+  body.innerHTML = '<div class="loading-overlay" style="position:static;padding:2rem"><div class="spinner"></div></div>';
+  modal.classList.remove('hidden');
+
+  try {
+    const predSnap = await db.collection('predictions').doc(uid).get();
+    renderEditPicksContent(predSnap.exists ? predSnap.data() : {});
+  } catch (e) {
+    body.innerHTML = `<div class="alert alert-danger">Ошибка загрузки: ${e.message}</div>`;
+  }
+}
+
+function closeEditPicksModal() {
+  document.getElementById('edit-picks-modal')?.classList.add('hidden');
+  _editPicksUid = null;
+}
+
+// Resolves the two teams for a series, checking adminResults first, then user's own picks
+function _resolveTeamsForEdit(sid, flatPicks) {
+  if (['c1','c2','c3','c4'].includes(sid)) {
+    const surv = (conf) => {
+      const r1s = conf === 'west' ? BRACKET.west.r1 : BRACKET.east.r1;
+      return r1s.map(s => {
+        const winner = adminResults[s.id]?.winner || flatPicks?.[s.id]?.winner;
+        if (!winner || (winner !== s.home && winner !== s.away)) return null;
+        const n = parseInt(s.id.slice(1));
+        return { teamSeed: winner === s.home ? n : (9 - n), winner };
+      }).filter(Boolean).sort((a, b) => a.teamSeed - b.teamSeed);
+    };
+    const w = surv('west'), e = surv('east');
+    if (w.length < 4 || e.length < 4) return [];
+    const map = {
+      'c1': [w[0].winner, e[3].winner],
+      'c2': [e[1].winner, w[2].winner],
+      'c3': [e[0].winner, w[3].winner],
+      'c4': [w[1].winner, e[2].winner],
+    };
+    return map[sid] || [];
+  }
+  if (ADMIN_TREE[sid]) {
+    return ADMIN_TREE[sid]
+      .map(id => adminResults[id]?.winner || flatPicks?.[id]?.winner || null)
+      .filter(Boolean);
+  }
+  const r1W = BRACKET.west.r1.find(s => s.id === sid);
+  if (r1W) return [r1W.home, r1W.away];
+  const r1E = BRACKET.east.r1.find(s => s.id === sid);
+  if (r1E) return [r1E.home, r1E.away];
+  return [];
+}
+
+function renderEditPicksContent(predData) {
+  const body = document.getElementById('edit-picks-modal-body');
+  body.innerHTML = `
+    <div class="mode-tabs" style="margin-bottom:1rem">
+      <button class="mode-tab active" id="ep-tab-full" onclick="switchEditPicksMode('full')">
+        <span class="tab-label">Полная сетка</span>
+      </button>
+      <button class="mode-tab" id="ep-tab-round" onclick="switchEditPicksMode('round')">
+        <span class="tab-label">По раундам</span>
+      </button>
+    </div>
+    <div id="ep-form-full">${buildEditForm('full', predData.fullBracket || {})}</div>
+    <div id="ep-form-round" class="hidden">${buildEditForm('round', predData.roundPredictions || {})}</div>
+  `;
+}
+
+function switchEditPicksMode(mode) {
+  document.getElementById('ep-tab-full')?.classList.toggle('active', mode === 'full');
+  document.getElementById('ep-tab-round')?.classList.toggle('active', mode === 'round');
+  document.getElementById('ep-form-full')?.classList.toggle('hidden', mode !== 'full');
+  document.getElementById('ep-form-round')?.classList.toggle('hidden', mode !== 'round');
+}
+
+function buildEditForm(mode, picksData) {
+  let flatPicks = {};
+  if (mode === 'round') {
+    for (const rnd of Object.values(picksData)) Object.assign(flatPicks, rnd);
+  } else {
+    flatPicks = picksData;
+  }
+
+  const SCORES = ['4:0','4:1','4:2','4:3'];
+  const ROUNDS_DEF = [
+    { name: '1/8 финала',  ids: ['w1','w2','w3','w4','e1','e2','e3','e4'], idx: 0 },
+    { name: '1/4 финала',  ids: ['c1','c2','c3','c4'],                    idx: 1 },
+    { name: '1/2 финала',  ids: ['s1','s2'],                              idx: 2 },
+    { name: 'Финал КГ',    ids: ['final'],                                idx: 3 },
+  ];
+
+  return ROUNDS_DEF.map(({ name, ids, idx }) => {
+    const rows = ids.map(sid => {
+      const pick = mode === 'full'
+        ? (flatPicks[sid] || {})
+        : ((picksData[String(idx)] || {})[sid] || {});
+
+      const teams = _resolveTeamsForEdit(sid, flatPicks);
+      const teamOpts = teams.length
+        ? teams.map(t => `<option value="${escapeHtmlAdmin(t)}"${pick.winner === t ? ' selected' : ''}>${escapeHtmlAdmin(t)}</option>`).join('')
+        : (pick.winner ? `<option value="${escapeHtmlAdmin(pick.winner)}" selected>${escapeHtmlAdmin(pick.winner)}</option>` : '');
+
+      const scoreOpts = SCORES.map(s =>
+        `<option value="${s}"${pick.score === s ? ' selected' : ''}>${s}</option>`
+      ).join('');
+
+      const label = ADMIN_ALL_SERIES.find(s => s.id === sid)?.name || sid;
+
+      return `
+        <div style="display:grid;grid-template-columns:1fr 150px 90px;gap:.4rem;align-items:center;padding:.35rem 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:.8rem;color:var(--text-2)">${label}</div>
+          <select class="admin-select ep-winner-sel" data-sid="${sid}" data-round="${idx}" style="font-size:.8rem;padding:.28rem .5rem">
+            <option value="">— Победитель —</option>
+            ${teamOpts}
+          </select>
+          <select class="admin-select ep-score-sel" data-sid="${sid}" data-round="${idx}" style="font-size:.8rem;padding:.28rem .5rem">
+            <option value="">— Счёт —</option>
+            ${scoreOpts}
+          </select>
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="margin-bottom:1.25rem">
+        <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;color:var(--text-3);letter-spacing:.06em;padding:.4rem 0;border-bottom:2px solid var(--border);margin-bottom:.1rem">${name}</div>
+        ${rows}
+      </div>`;
+  }).join('');
+}
+
+async function saveEditedPicks() {
+  if (!_editPicksUid) return;
+  const btn = document.getElementById('edit-picks-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Сохранение…';
+
+  try {
+    const update = {};
+
+    const fullForm = document.getElementById('ep-form-full');
+    if (fullForm) {
+      const fb = {};
+      fullForm.querySelectorAll('.ep-winner-sel').forEach(sel => {
+        const winner = sel.value;
+        if (!winner) return;
+        const sid   = sel.dataset.sid;
+        const score = fullForm.querySelector(`.ep-score-sel[data-sid="${sid}"]`)?.value || null;
+        fb[sid] = Object.assign({ winner }, score ? { score } : {});
+      });
+      if (Object.keys(fb).length) update.fullBracket = fb;
+    }
+
+    const roundForm = document.getElementById('ep-form-round');
+    if (roundForm) {
+      const rp = {};
+      roundForm.querySelectorAll('.ep-winner-sel').forEach(sel => {
+        const winner = sel.value;
+        if (!winner) return;
+        const sid      = sel.dataset.sid;
+        const roundIdx = sel.dataset.round;
+        const score    = roundForm.querySelector(`.ep-score-sel[data-sid="${sid}"]`)?.value || null;
+        if (!rp[roundIdx]) rp[roundIdx] = {};
+        rp[roundIdx][sid] = Object.assign({ winner }, score ? { score } : {});
+      });
+      if (Object.keys(rp).length) update.roundPredictions = rp;
+    }
+
+    if (!Object.keys(update).length) {
+      showToast('Выбери хотя бы одного победителя', 'error');
+      return;
+    }
+
+    await db.collection('predictions').doc(_editPicksUid).set(update, { merge: true });
+    showToast('Прогноз сохранён!', 'success');
+    closeEditPicksModal();
+    renderParticipants();
+  } catch (e) {
+    showToast('Ошибка: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Сохранить';
   }
 }
 

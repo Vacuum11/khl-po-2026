@@ -354,11 +354,11 @@ async function renderParticipants() {
               ${r.hasRound ? '<span class="complete-badge" style="font-size:.65rem">По раундам</span>' : ''}
               ${!r.hasFull && !r.hasRound ? '<span style="font-size:.75rem;color:var(--text-3)">Нет прогноза</span>' : ''}
               <button class="btn btn-ghost btn-sm" style="font-size:.72rem;padding:.25rem .6rem"
-                onclick="startRenameParticipant('${r.uid}', ${JSON.stringify(escapeHtmlAdmin(r.username))})">
+                onclick="startRenameParticipant('${r.uid}', ${escapeHtmlAdmin(JSON.stringify(r.username))})">
                 ✏ Имя
               </button>
               <button class="btn btn-ghost btn-sm" style="font-size:.72rem;padding:.25rem .6rem"
-                onclick="openEditPicksModal('${r.uid}', ${JSON.stringify(r.username)})">
+                onclick="openEditPicksModal('${r.uid}', ${escapeHtmlAdmin(JSON.stringify(r.username))})">
                 🗂 Прогноз
               </button>
             </div>

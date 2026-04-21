@@ -295,5 +295,5 @@ function subscribeLeaderboard(mode) {
   const container = document.getElementById('leaderboard-body');
   // Simple polling every 60s (Firestore real-time for all docs can be expensive on free tier)
   loadLeaderboard(mode);
-  setInterval(() => loadLeaderboard(mode), 60_000);
+  setInterval(() => loadLeaderboard(lbMode), 60_000);
 }
